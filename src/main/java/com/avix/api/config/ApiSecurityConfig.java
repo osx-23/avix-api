@@ -7,6 +7,8 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
 import org.springframework.security.config.Customizer;
+import org.springframework.security.authorization.AuthorizationManagers;
+import org.springframework.security.authorization.AuthorityAuthorizationManager;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
@@ -40,7 +42,9 @@ public class ApiSecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/api/v1/auth/web", "/api/v1/auth/movil",
                                 "/api/v1/setup/supervisor").permitAll()
                         .requestMatchers("/api/v1/admin/**")
-                                .hasAllAuthorities("ROLE_SUPERVISOR", "CLIENT_WEB")
+                                .access(AuthorizationManagers.allOf(
+                                        AuthorityAuthorizationManager.hasAuthority("ROLE_SUPERVISOR"),
+                                        AuthorityAuthorizationManager.hasAuthority("CLIENT_WEB")))
                         .requestMatchers(HttpMethod.POST, "/api/v1/registros").hasAuthority("CLIENT_MOVIL")
                         .requestMatchers(HttpMethod.PATCH, "/api/v1/registros/**").hasAuthority("CLIENT_WEB")
                         .requestMatchers("/api/v1/**").authenticated()
