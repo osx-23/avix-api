@@ -53,10 +53,9 @@ public class RegistroService {
                 "select", "id", "limit", "1"), "Plaza no encontrada.");
         String idPlaza = plaza.path("id").asText();
 
-        JsonNode asignacion = SupabaseData.first(db.select("usuario_plazas", Map.of(
-                "usuario_id", "eq."+user.id(), "plaza_id", "eq."+idPlaza,
-                "activa", "eq.true", "select", "usuario_id", "limit", "1")));
-        if (asignacion == null) throw AvixAuth.forbidden();
+        // La consulta de catálogos permite al supervisor acceder a cualquier plaza activa.
+        // Aplicamos aquí la misma política, sin relajar los permisos de agente/controlador.
+        permisos.requireAsignada(user, plaza.path("id").asLong());
 
         JsonNode via = required("vias", Map.of(
                 "plaza_id", "eq."+idPlaza, "numero", "eq."+req.via(),
