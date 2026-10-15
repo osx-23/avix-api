@@ -41,4 +41,16 @@ public class RegistroController {
                            @RequestParam(required=false) String fecha) {
         return registros.historial(auth.require(bearer), page, size, plaza, accion, fecha);
     }
+    @GetMapping("/consulta")
+    public JsonNode consultar(@RequestHeader(value="Authorization",required=false) String bearer,
+                              @RequestParam(defaultValue="0") int page,
+                              @RequestParam(defaultValue="500") int size,
+                              @RequestParam String desde,
+                              @RequestParam String hasta,
+                              @RequestParam(required=false) String plaza,
+                              @RequestParam(required=false) String accion,
+                              @RequestParam(required=false) Integer via) {
+        return registros.consultarRango(auth.require(bearer),page,size,desde,hasta,plaza,accion,via);
+    }
+
 }

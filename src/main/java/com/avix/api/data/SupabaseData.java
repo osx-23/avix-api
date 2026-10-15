@@ -19,11 +19,14 @@ import java.util.StringJoiner;
 public class SupabaseData {
     private final String url;
     private final String secret;
+    private final RestClient client;
 
     public SupabaseData(@Value("$"+"{avix.supabase-url}") String url,
                         @Value("$"+"{avix.supabase-secret:}") String secret) {
         this.url = url.replaceAll("/+$", "");
         this.secret = secret;
+        // Reutilizar el cliente HTTP evita recrear infraestructura por cada consulta.
+        this.client = RestClient.builder().defaultHeader("apikey", secret == null ? "" : secret).build();
     }
 
     public boolean configured() {
@@ -34,7 +37,7 @@ public class SupabaseData {
     private RestClient http() {
         if (!configured()) throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
                 "Falta configurar la clave privada de Supabase en el servidor.");
-        return RestClient.builder().defaultHeader("apikey", secret).build();
+        return client;
     }
 
     private URI resource(String table, Map<String, String> query) {

@@ -9,6 +9,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
 import java.time.*;
+import java.time.format.DateTimeParseException;
 import java.util.*;
 
 @Service
@@ -146,4 +147,80 @@ public class RegistroService {
         }
         return db.select("registros", query);
     }
+
+    /**
+     * Consulta paginada por instante; evita una petición por jornada operativa.
+     * El rango es [desde, hasta) en UTC, con permisos aplicados en PostgREST
+     * ANTES de paginar (no hay filtrado posterior en memoria).
+     */
+    public JsonNode consultarRango(AvixAuth.Principal user, int page, int size,
+                                  String desdeTexto, String hastaTexto,
+                                  String plaza, String accion, Integer via) {
+        if (page < 0 || page > 100_000 || size < 1 || size > 500)
+            throw AvixAuth.bad("Paginación inválida.");
+        if (desdeTexto == null || hastaTexto == null)
+            throw AvixAuth.bad("Indica desde y hasta con zona horaria.");
+        final Instant desde, hasta;
+        try {
+            desde = OffsetDateTime.parse(desdeTexto).toInstant();
+            hasta = OffsetDateTime.parse(hastaTexto).toInstant();
+        } catch (DateTimeParseException ex) {
+            throw AvixAuth.bad("Fechas inválidas. Usa ISO 8601 con zona horaria.");
+        }
+        Duration duracion = Duration.between(desde, hasta);
+        if (duracion.isNegative() || duracion.isZero() || duracion.compareTo(Duration.ofDays(33)) > 0)
+            throw AvixAuth.bad("El rango debe ser positivo y no superar 33 días.");
+        if (via != null && (via < 1 || via > 9999))
+            throw AvixAuth.bad("Vía inválida.");
+
+        Map<String,String> query = new HashMap<>();
+        query.put("select", "id,idempotencia_id,placa,origen,observaciones,ocurrido_en,fecha_operativa,creado_en,anulado,"
+                + "plazas(codigo),vias!registros_via_pertenece_a_plaza(numero),"
+                + "acciones(codigo),turnos(codigo),usuarios!registros_registrado_por_fkey(codigo)");
+        query.put("order", "ocurrido_en.desc,id.desc");
+        query.put("limit", String.valueOf(size));
+        query.put("offset", String.valueOf((long)page * size));
+        query.put("and", "(ocurrido_en.gte." + desde + ",ocurrido_en.lt." + hasta + ")");
+
+        if (user.rol().equals("AGENTE"))
+            query.put("registrado_por", "eq." + user.id());
+        if (user.rol().equals("CONTROLADOR"))
+            query.put("plaza_id", permisos.filtro(user));
+
+        if (plaza != null && !plaza.isBlank()) {
+            if (!plaza.matches("P[1-9][0-9]{0,2}"))
+                throw AvixAuth.bad("Plaza inválida.");
+            JsonNode p = required("plazas", Map.of(
+                    "codigo", "eq." + plaza, "select", "id", "limit", "1"),
+                    "Plaza no encontrada.");
+            if (user.rol().equals("CONTROLADOR"))
+                permisos.requireAsignada(user, p.path("id").asLong());
+            query.put("plaza_id", "eq." + p.path("id").asLong());
+        }
+
+        if (accion != null && !accion.isBlank()) {
+            if (!accion.matches("(?i)FUGA|DERIVADO|LIBERADO"))
+                throw AvixAuth.bad("Acción inválida.");
+            JsonNode a = required("acciones", Map.of(
+                    "codigo", "eq." + accion.toUpperCase(Locale.ROOT),
+                    "select", "id", "limit", "1"),
+                    "Acción no encontrada.");
+            query.put("accion_id", "eq." + a.path("id").asInt());
+        }
+
+        if (via != null) {
+            Map<String,String> viasQuery = new HashMap<>();
+            viasQuery.put("numero", "eq." + via);
+            viasQuery.put("select", "id");
+            viasQuery.put("limit", "500");
+            JsonNode ids = db.select("vias", viasQuery);
+            List<String> viaIds = new ArrayList<>();
+            if (ids != null && ids.isArray())
+                for (JsonNode row : ids) viaIds.add(row.path("id").asText());
+            if (viaIds.isEmpty()) query.put("via_id", "eq.-1");
+            else query.put("via_id", "in.(" + String.join(",", viaIds) + ")");
+        }
+        return db.select("registros", query);
+    }
+
 }
