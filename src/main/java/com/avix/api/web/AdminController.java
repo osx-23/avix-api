@@ -15,7 +15,8 @@ import java.util.UUID;
 public class AdminController {
     private final AvixAuth auth;
     private final SupabaseData db;
-    public AdminController(AvixAuth auth, SupabaseData db) { this.auth=auth; this.db=db; }
+    private final AdminGestionService gestion;
+    public AdminController(AvixAuth auth, SupabaseData db, AdminGestionService gestion) { this.auth=auth; this.db=db; this.gestion=gestion; }
 
     public record UsuarioNuevo(@NotBlank String codigo, @NotBlank String nombres,
                                String apellidos, @NotBlank String rol, String contrasena) {}
@@ -61,5 +62,69 @@ public class AdminController {
         return db.upsert("vias", Map.of("on_conflict", "plaza_id,numero"),
                 Map.of("plaza_id", plaza.path("id").asLong(), "numero", req.numero(),
                         "descripcion", req.descripcion() == null ? "" : req.descripcion(), "activa", true));
+    }
+
+    @GetMapping("/usuarios")
+    public JsonNode listarUsuarios(
+            @RequestHeader(value="Authorization",required=false) String bearer,
+            @RequestParam(defaultValue="0") int page,
+            @RequestParam(defaultValue="20") int size,
+            @RequestParam(required=false) String rol,
+            @RequestParam(required=false) Boolean activo) {
+        auth.admin(bearer);
+        return gestion.usuarios(page,size,rol,activo);
+    }
+
+    @GetMapping("/usuarios/{id}")
+    public JsonNode obtenerUsuario(
+            @RequestHeader(value="Authorization",required=false) String bearer,
+            @PathVariable UUID id) {
+        auth.admin(bearer);
+        return gestion.obtener(id);
+    }
+
+    @PatchMapping("/usuarios/{id}")
+    public JsonNode modificarUsuario(
+            @RequestHeader(value="Authorization",required=false) String bearer,
+            @PathVariable UUID id, @RequestBody JsonNode cambios) {
+        AvixAuth.Principal actor=auth.admin(bearer);
+        return gestion.modificar(actor,id,cambios);
+    }
+
+    @GetMapping("/usuarios/{id}/plazas")
+    public JsonNode asignacionesUsuario(
+            @RequestHeader(value="Authorization",required=false) String bearer,
+            @PathVariable UUID id) {
+        auth.admin(bearer);
+        return gestion.asignaciones(id);
+    }
+
+    public record Estado(@NotNull Boolean activa) {}
+
+    @PatchMapping("/usuarios/{id}/plazas/{codigoPlaza}")
+    public JsonNode cambiarAsignacion(
+            @RequestHeader(value="Authorization",required=false) String bearer,
+            @PathVariable UUID id,@PathVariable String codigoPlaza,
+            @Valid @RequestBody Estado estado) {
+        auth.admin(bearer);
+        return gestion.cambiarAsignacion(id,codigoPlaza,estado.activa());
+    }
+
+    @GetMapping("/vias")
+    public JsonNode listarVias(
+            @RequestHeader(value="Authorization",required=false) String bearer,
+            @RequestParam(required=false) String plaza,
+            @RequestParam(defaultValue="0") int page,
+            @RequestParam(defaultValue="20") int size) {
+        auth.admin(bearer);
+        return gestion.vias(plaza,page,size);
+    }
+
+    @PatchMapping("/vias/{id}")
+    public JsonNode modificarVia(
+            @RequestHeader(value="Authorization",required=false) String bearer,
+            @PathVariable long id, @RequestBody JsonNode cambios) {
+        auth.admin(bearer);
+        return gestion.editarVia(id,cambios);
     }
 }

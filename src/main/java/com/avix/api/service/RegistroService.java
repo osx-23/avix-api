@@ -2,6 +2,7 @@ package com.avix.api.service;
 
 import com.avix.api.data.SupabaseData;
 import com.avix.api.security.AvixAuth;
+import com.avix.api.security.PermisosPlaza;
 import com.avix.api.web.RegistroController.RegistroNuevo;
 import com.fasterxml.jackson.databind.JsonNode;
 import org.springframework.http.HttpStatus;
@@ -13,8 +14,9 @@ import java.util.*;
 @Service
 public class RegistroService {
     private final SupabaseData db;
+    private final PermisosPlaza permisos;
     private static final ZoneId LIMA = ZoneId.of("America/Lima");
-    public RegistroService(SupabaseData db) { this.db = db; }
+    public RegistroService(SupabaseData db, PermisosPlaza permisos) { this.db = db; this.permisos = permisos; }
 
     public record TurnoFecha(String turno, LocalDate fechaOperativa) {}
 
@@ -123,11 +125,13 @@ public class RegistroService {
         query.put("limit", Integer.toString(size));
         query.put("offset", Long.toString((long)page * size));
         if (user.rol().equals("AGENTE")) query.put("registrado_por", "eq."+user.id());
+        if (user.rol().equals("CONTROLADOR")) query.put("plaza_id", permisos.filtro(user));
 
         if (plaza != null && !plaza.isBlank()) {
             if (!plaza.matches("P[1-9][0-9]{0,2}")) throw AvixAuth.bad("Plaza inválida.");
             JsonNode p = required("plazas", Map.of("codigo","eq."+plaza,
                     "select","id", "limit","1"), "Plaza no encontrada.");
+            if (user.rol().equals("CONTROLADOR")) permisos.requireAsignada(user, p.path("id").asLong());
             query.put("plaza_id", "eq."+p.path("id").asLong());
         }
         if (accion != null && !accion.isBlank()) {
