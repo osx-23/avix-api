@@ -1,0 +1,11 @@
+spring:
+  application:
+    name: AVIX-API
+server:
+  port: ${PORT:8080}
+  forward-headers-strategy: none
+avix:
+  supabase-url: ${SUPABASE_URL:https://iccjcqausgunnekbiswy.supabase.co}
+  supabase-secret: ${SUPABASE_SECRET_KEY:}
+  setup-secret: ${AVIX_SETUP_SECRET:}
+  cors-origins: ${AVIX_CORS_ORIGINS:}
