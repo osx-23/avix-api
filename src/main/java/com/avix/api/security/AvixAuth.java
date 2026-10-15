@@ -22,13 +22,16 @@ public class AvixAuth {
     public record Principal(String id, String codigo, String rol, String cliente) {}
     private final SupabaseData db;
     private final String setupSecret;
+    private final boolean mobileCodeLoginEnabled;
     private final BCryptPasswordEncoder encoder = new BCryptPasswordEncoder(12);
     private final SecureRandom secureRandom = new SecureRandom();
     private final ConcurrentHashMap<String, Deque<Long>> loginAttempts = new ConcurrentHashMap<>();
 
-    public AvixAuth(SupabaseData db, @Value("$"+"{avix.setup-secret:}") String setupSecret) {
+    public AvixAuth(SupabaseData db, @Value("$"+"{avix.setup-secret:}") String setupSecret,
+                    @Value("$"+"{avix.mobile-code-login-enabled:true}") boolean mobileCodeLoginEnabled) {
         this.db = db;
         this.setupSecret = setupSecret;
+        this.mobileCodeLoginEnabled = mobileCodeLoginEnabled;
     }
 
     public static ResponseStatusException unauthenticated() {
@@ -54,8 +57,7 @@ public class AvixAuth {
         } catch (NoSuchAlgorithmException ex) { throw new IllegalStateException(ex); }
     }
 
-    // Protección elemental; en producción multi-instancia reemplazar con Redis/WAF.
-    private void throttle(String ip, String code, String client) {
+        private void throttle(String ip, String code, String client) {
         String key = ip + ":" + code + ":" + client;
         long now = System.currentTimeMillis();
         Deque<Long> entries = loginAttempts.computeIfAbsent(key, ignored -> new ArrayDeque<>());
@@ -69,6 +71,7 @@ public class AvixAuth {
 
     public Map<String, Object> login(String codigo, String password, String client, String ip) {
         checkCode(codigo);
+        if ("MOVIL".equals(client) && !mobileCodeLoginEnabled) throw forbidden();
         throttle(ip, codigo, client);
         JsonNode user = SupabaseData.first(db.select("usuarios", Map.of(
                 "codigo", "eq." + codigo, "activo", "eq.true",

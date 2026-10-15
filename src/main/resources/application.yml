@@ -9,3 +9,4 @@ avix:
   supabase-secret: ${SUPABASE_SECRET_KEY:}
   setup-secret: ${AVIX_SETUP_SECRET:}
   cors-origins: ${AVIX_CORS_ORIGINS:}
+  mobile-code-login-enabled: ${AVIX_MOBILE_CODE_LOGIN_ENABLED:true}

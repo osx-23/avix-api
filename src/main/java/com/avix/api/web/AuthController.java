@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
 
@@ -17,7 +18,7 @@ public class AuthController {
     public AuthController(AvixAuth auth) { this.auth = auth; }
 
     public record CodigoLogin(@NotBlank String codigo) {}
-    public record WebLogin(@NotBlank String codigo, @NotBlank String contrasena) {}
+    public record WebLogin(@NotBlank String codigo, @NotBlank @Size(max=256) String contrasena) {}
 
     @PostMapping("/auth/movil")
     public Map<String, Object> movil(@Valid @RequestBody CodigoLogin req, HttpServletRequest http) {
