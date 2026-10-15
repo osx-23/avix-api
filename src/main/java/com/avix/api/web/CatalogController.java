@@ -17,6 +17,22 @@ public class CatalogController {
     private final PermisosPlaza permisos;
     public CatalogController(AvixAuth auth, SupabaseData db, PermisosPlaza permisos) { this.auth=auth; this.db=db; this.permisos=permisos; }
 
+    /**
+     * Las plazas asignadas son distintas del catalogo general:
+     * un supervisor ve todas las plazas en el catalogo, pero en movil debe
+     * priorizar su asignacion de trabajo.
+     */
+    @GetMapping("/plazas/asignadas")
+    public JsonNode plazasAsignadas(@RequestHeader(value="Authorization", required=false) String bearer) {
+        AvixAuth.Principal user = auth.require(bearer);
+        var ids = permisos.asignadas(user);
+        if (ids.isEmpty()) return com.fasterxml.jackson.databind.node.JsonNodeFactory.instance.arrayNode();
+        String filtro = "in.(" + ids.stream().map(String::valueOf)
+                .reduce((a, b) -> a + "," + b).orElse("") + ")";
+        return db.select("plazas", Map.of("id", filtro, "activa", "eq.true",
+                "select", "id,codigo,activa", "order", "id.asc"));
+    }
+
     @GetMapping("/{tipo}")
     public JsonNode catalogo(@RequestHeader(value="Authorization", required=false) String bearer,
                              @PathVariable String tipo, @RequestParam(required=false) String plaza) {
