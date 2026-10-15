@@ -31,6 +31,7 @@ Antes de producción es obligatorio implementar y probar un segundo factor o sec
 - No habilitar logging de credenciales ni del Authorization bearer.
 - Revisar restricciones RLS/GRANT de Supabase, rotación de secreto y permisos mínimos para la clave de servicio. El servidor usa clave privada con acceso amplio.
 - Implementar CSP para el frontend y gestión de sesiones segura frente a XSS.
+- El bloqueo de intentos se mantiene en memoria con ventanas de 15 minutos: máximo 5 intentos por IP/código y 25 por cuenta/cliente; se limita el número de claves recordadas. En múltiples instancias hace falta reemplazarlo con almacenamiento distribuido/WAF.
 - Ejecutar mvn verify y pruebas de integración antes de implementar en producción.
 
 ## Estrategia de migración

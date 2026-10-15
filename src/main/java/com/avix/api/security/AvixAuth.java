@@ -16,6 +16,7 @@ import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicLong;
 
 @Service
 public class AvixAuth {
@@ -25,7 +26,11 @@ public class AvixAuth {
     private final boolean mobileCodeLoginEnabled;
     private final BCryptPasswordEncoder encoder = new BCryptPasswordEncoder(12);
     private final SecureRandom secureRandom = new SecureRandom();
-    private final ConcurrentHashMap<String, Deque<Long>> loginAttempts = new ConcurrentHashMap<>();
+    private record AttemptWindow(long startedAt, int count) {}
+    private static final long ATTEMPT_WINDOW_MS = 900_000L;
+    private static final int MAX_TRACKED_WINDOWS = 20_000;
+    private final ConcurrentHashMap<String, AttemptWindow> loginAttempts = new ConcurrentHashMap<>();
+    private final AtomicLong lastCleanup = new AtomicLong(0);
 
     public AvixAuth(SupabaseData db, @Value("$"+"{avix.setup-secret:}") String setupSecret,
                     @Value("$"+"{avix.mobile-code-login-enabled:true}") boolean mobileCodeLoginEnabled) {
@@ -58,15 +63,31 @@ public class AvixAuth {
     }
 
         private void throttle(String ip, String code, String client) {
-        String key = ip + ":" + code + ":" + client;
         long now = System.currentTimeMillis();
-        Deque<Long> entries = loginAttempts.computeIfAbsent(key, ignored -> new ArrayDeque<>());
-        synchronized (entries) {
-            while (!entries.isEmpty() && now - entries.peekFirst() > 900_000L) entries.removeFirst();
-            if (entries.size() >= 5) throw new ResponseStatusException(HttpStatus.TOO_MANY_REQUESTS,
-                    "Demasiados intentos de acceso.");
-            entries.addLast(now);
+        if (loginAttempts.size() >= 1_000 && now - lastCleanup.get() > 60_000L) {
+            long previous = lastCleanup.get();
+            if (lastCleanup.compareAndSet(previous, now)) {
+                loginAttempts.entrySet().removeIf(entry ->
+                        now - entry.getValue().startedAt() > ATTEMPT_WINDOW_MS);
+            }
         }
+        if (loginAttempts.size() >= MAX_TRACKED_WINDOWS)
+            throw new ResponseStatusException(HttpStatus.TOO_MANY_REQUESTS,
+                    "Demasiados intentos de acceso.");
+
+        registrarIntento("origen:" + ip + ":" + code + ":" + client, 5, now);
+        registrarIntento("cuenta:" + code + ":" + client, 25, now);
+    }
+
+    private void registrarIntento(String key, int limit, long now) {
+        loginAttempts.compute(key, (ignored, window) -> {
+            if (window == null || now - window.startedAt() > ATTEMPT_WINDOW_MS)
+                return new AttemptWindow(now, 1);
+            if (window.count() >= limit)
+                throw new ResponseStatusException(HttpStatus.TOO_MANY_REQUESTS,
+                        "Demasiados intentos de acceso.");
+            return new AttemptWindow(window.startedAt(), window.count() + 1);
+        });
     }
 
     public Map<String, Object> login(String codigo, String password, String client, String ip) {
